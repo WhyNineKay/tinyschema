@@ -1,6 +1,7 @@
-from typing import Any, Type
-from .errors import ValidationError
 import re
+from typing import Any, Type
+
+from .errors import ValidationError
 
 
 class Validator:

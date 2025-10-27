@@ -129,7 +129,6 @@ class Field:
 
         return value
 
-
     def _pre_parse_nested_default(self) -> Any:
         """Validate and normalize the default value for nested fields."""
         default_value = self._default
@@ -146,7 +145,6 @@ class Field:
             parsed_value[field.name] = field.parse(nested_value)
 
         return parsed_value
-
 
     def parse(self, value: Any) -> Any:
         """

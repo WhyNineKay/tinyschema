@@ -1,5 +1,5 @@
-from .schema import Schema
 from .interface import DataInterface
+from .schema import Schema
 
 
 class SchemaManager:

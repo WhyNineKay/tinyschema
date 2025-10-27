@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from tinyschema import Schema, Field, JSONFileInterface, SchemaManager
 from tinyschema.validators import TypeValidator, LengthValidator, EmailValidator
 
