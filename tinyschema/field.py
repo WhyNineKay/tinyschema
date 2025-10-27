@@ -81,29 +81,21 @@ class Field:
             raise ValueError("Field that is not required must have a 'default' value.")
 
         # Pre-parse the default value against validators if applicable
-        if default_provided:
-            try:
-                self._default = self._parse_non_null_value(self._default)
-            except (FieldRequiredError, FieldTypeError, ValidationError) as e:
-                raise ValueError(
-                    f"Default value for field '{self._name}' does not conform to the schema: {e}"
-                )
-
-        if factory_provided:
-            try:
-                sample_value = self._default_factory()
-            except Exception as exc:  # pragma: no cover - defensive guard
-                raise ValueError(
-                    f"Default factory for field '{self._name}' raised an exception during initialization: {exc}"
-                ) from exc
-
-            try:
-                # Ensure the produced value satisfies the field constraints
-                self._parse_non_null_value(sample_value)
-            except (FieldRequiredError, FieldTypeError, ValidationError) as e:
-                raise ValueError(
-                    f"Default factory for field '{self._name}' does not produce schema-compliant values: {e}"
-                )
+        if self._default is not None:
+            if self._nested_fields:
+                try:
+                    self._default = self._pre_parse_nested_default()
+                except (FieldRequiredError, FieldTypeError, ValidationError) as e:
+                    raise ValueError(
+                        f"Default value for field '{self._name}' does not conform to the nested schema: {e}"
+                    )
+            else:
+                try:
+                    self._default = self._pre_parse_default_against_validators()
+                except ValidationError as e:
+                    raise ValueError(
+                        f"Default value for field '{self._name}' does not conform to the specified validators: {e}"
+                    )
 
     @property
     def name(self) -> str:
@@ -171,6 +163,24 @@ class Field:
         return deepcopy(self._default)
 
 
+    def _pre_parse_nested_default(self) -> Any:
+        """Validate and normalize the default value for nested fields."""
+        default_value = self._default
+
+        if not isinstance(default_value, dict):
+            raise FieldTypeError(
+                f"Field '{self._name}' expects default value to be a dict for nested fields."
+            )
+
+        parsed_value = {}
+
+        for field in self._nested_fields:
+            nested_value = default_value.get(field.name, None)
+            parsed_value[field.name] = field.parse(nested_value)
+
+        return parsed_value
+
+
     def parse(self, value: Any) -> Any:
         """
         Parse and validate the given value according to the field's configuration.
@@ -184,6 +194,18 @@ class Field:
         if value is None:
             if self._required:
                 raise FieldRequiredError(f"Field '{self._name}' is required but missing.")
+            else:
+                return deepcopy(self._default)
+
+        if self._nested_fields:
+            if not isinstance(value, dict):
+                raise FieldTypeError(f"Field '{self._name}' expects a dictionary for nested fields.")
+
+            parsed_value = {}
+
+            for field in self._nested_fields:
+                field_value = value.get(field.name, None)
+                parsed_value[field.name] = field.parse(field_value)
 
             return self._generate_default_value()
 
