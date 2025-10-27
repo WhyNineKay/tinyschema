@@ -34,6 +34,11 @@ class Schema:
         :return: The validated data.
         """
 
+        if not isinstance(data, dict):
+            raise TypeError(
+                f"Schema.validate expects 'data' to be a dict, got {type(data).__name__}."
+            )
+
         validated_data = {}
 
         for field in self._fields:
