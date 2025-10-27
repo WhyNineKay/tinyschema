@@ -1,0 +1,13 @@
+[build-system]
+requires = []
+
+[project]
+name = "tinyschema"
+version = "0.1.0"
+description = "A tiny schema validation library for Python."
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Scott Simpson"}
+]
+
