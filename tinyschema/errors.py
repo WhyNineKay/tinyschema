@@ -21,3 +21,5 @@ class FieldTypeError(FieldError):
 class ValidationError(TinySchemaError):
     """Raised when validation fails."""
     pass
+
+

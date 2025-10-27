@@ -1,3 +1,5 @@
+from typing import Any, Dict
+
 from .field import Field
 
 
@@ -34,6 +36,11 @@ class Schema:
         :return: The validated data.
         """
 
+        if not isinstance(data, dict):
+            raise TypeError(
+                f"Schema.validate expects 'data' to be a dict, got {type(data).__name__}."
+            )
+
         validated_data = {}
 
         for field in self._fields:
@@ -44,3 +51,16 @@ class Schema:
             validated_data[field.name] = field.parse(field_data)
 
         return validated_data
+
+    def generate_defaults(self) -> dict:
+        """Build a dictionary containing defaults for every optional field."""
+
+        defaults: Dict[str, Any] = {}
+
+        for field in self._fields:
+            if field.required:
+                continue
+
+            defaults[field.name] = field.parse(None)
+
+        return defaults

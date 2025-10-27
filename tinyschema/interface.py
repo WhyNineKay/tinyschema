@@ -76,7 +76,7 @@ class FileInterface(DataInterface):
         """
         if not self._file_path.exists():
             if self._create_if_missing:
-                # Create the file. DO NOT write template data
+                # Create the file and populate it with the template data
                 self._file_path.touch()
 
                 self._save_template_data()
