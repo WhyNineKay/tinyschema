@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import List, Any
 
 from .errors import FieldRequiredError, FieldTypeError, ValidationError
@@ -67,13 +68,21 @@ class Field:
             raise ValueError("Field that is not required must have a 'default' value.")
 
         # Pre-parse the default value against validators if applicable
-        if self._default is not None and not self._nested_fields:
-            try:
-                self._default = self._pre_parse_default_against_validators()
-            except ValidationError as e:
-                raise ValueError(
-                    f"Default value for field '{self._name}' does not conform to the specified validators: {e}"
-                )
+        if self._default is not None:
+            if self._nested_fields:
+                try:
+                    self._default = self._pre_parse_nested_default()
+                except (FieldRequiredError, FieldTypeError, ValidationError) as e:
+                    raise ValueError(
+                        f"Default value for field '{self._name}' does not conform to the nested schema: {e}"
+                    )
+            else:
+                try:
+                    self._default = self._pre_parse_default_against_validators()
+                except ValidationError as e:
+                    raise ValueError(
+                        f"Default value for field '{self._name}' does not conform to the specified validators: {e}"
+                    )
 
     @property
     def name(self) -> str:
@@ -121,6 +130,24 @@ class Field:
         return value
 
 
+    def _pre_parse_nested_default(self) -> Any:
+        """Validate and normalize the default value for nested fields."""
+        default_value = self._default
+
+        if not isinstance(default_value, dict):
+            raise FieldTypeError(
+                f"Field '{self._name}' expects default value to be a dict for nested fields."
+            )
+
+        parsed_value = {}
+
+        for field in self._nested_fields:
+            nested_value = default_value.get(field.name, None)
+            parsed_value[field.name] = field.parse(nested_value)
+
+        return parsed_value
+
+
     def parse(self, value: Any) -> Any:
         """
         Parse and validate the given value according to the field's configuration.
@@ -135,7 +162,7 @@ class Field:
             if self._required:
                 raise FieldRequiredError(f"Field '{self._name}' is required but missing.")
             else:
-                return self._default
+                return deepcopy(self._default)
 
         if self._nested_fields:
             if not isinstance(value, dict):
