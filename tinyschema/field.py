@@ -1,13 +1,7 @@
-"""
-Field definitions for TinySchema.
-"""
 from typing import List, Any
 
-from tinyschema.errors import FieldRequiredError, FieldTypeError
-
-
-class Validator:
-    pass
+from .errors import FieldRequiredError, FieldTypeError, ValidationError
+from .validators import Validator
 
 
 class Field:
@@ -19,10 +13,8 @@ class Field:
                  default: Any = None
                  ) -> None:
         """
-        Initialize a Field instance.
-
         :param name: Name of the key in the data dictionary.
-        :param required: Whether the field is required or not.
+        :param required: Whether the field is required or not. Defaults to False.
         :param validators: List of Validator instances to validate the field's value.
         :param nested_fields: List of nested Field instances for complex structures.
         :param default: Default value if the field is not required.
@@ -74,6 +66,15 @@ class Field:
         if not self._required and self._default is None:
             raise ValueError("Field that is not required must have a 'default' value.")
 
+        # Pre-parse the default value against validators if applicable
+        if self._default is not None and not self._nested_fields:
+            try:
+                self._default = self._pre_parse_default_against_validators()
+            except ValidationError as e:
+                raise ValueError(
+                    f"Default value for field '{self._name}' does not conform to the specified validators: {e}"
+                )
+
     @property
     def name(self) -> str:
         return self._name
@@ -102,13 +103,33 @@ class Field:
     def __str__(self) -> str:
         return f"Field('{self._name}')"
 
+    def _pre_parse_default_against_validators(self) -> Any:
+        """
+        Pre-parse the default value against the field's validators.
+
+        :return: The validated (and possibly transformed) default value.
+        :raises ValidationError: If a validator fails on the default value.
+        """
+        value = self._default
+
+        for validator in self._validators:
+            if validator.attempt_fix:
+                value = validator.validate(self.name, value)
+            else:
+                validator.validate(self.name, value)
+
+        return value
+
+
     def parse(self, value: Any) -> Any:
         """
         Parse and validate the given value according to the field's configuration.
 
         :param value: The value to be parsed and validated.
         :return: The validated (and possibly transformed) value.
-        :raises ValueError: If validation fails or required field is missing.
+        :raises FieldRequiredError: If a required field is missing.
+        :raises FieldTypeError: If the value is of the wrong type for nested fields.
+        :raises ValidationError: If a validator fails.
         """
         if value is None:
             if self._required:
@@ -129,10 +150,9 @@ class Field:
             return parsed_value
 
         for validator in self._validators:
-            # validator.validate() may raise a ValidationError
-            new_value = validator.validate(self.name, value)
-
             if validator.attempt_fix:
-                value = new_value
+                value = validator.validate(self.name, value)
+            else:
+                validator.validate(self.name, value)
 
         return value

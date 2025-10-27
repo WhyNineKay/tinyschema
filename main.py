@@ -1,4 +1,5 @@
-from tinyschema import Schema, Field
+from pathlib import Path
+from tinyschema import Schema, Field, JSONFileInterface, SchemaManager
 from tinyschema.validators import TypeValidator, LengthValidator, EmailValidator
 
 
@@ -7,11 +8,12 @@ def main() -> None:
         fields=[
             Field(
                 name="name",
-                required=True,
+                required=False,
                 validators=[
                     TypeValidator(str),
                     LengthValidator(min_length=1, max_length=100, attempt_fix=True)
-                ]
+                ],
+                default="Unknown"
             ),
             Field(
                 name="email",
@@ -46,3 +48,13 @@ def main() -> None:
         ]
     )
 
+    interface = JSONFileInterface(Path("example_data.json"), True)
+    manager = SchemaManager(schema, interface)
+
+    data = manager.load_and_validate()
+
+    print(data)
+
+
+if __name__ == '__main__':
+    main()
