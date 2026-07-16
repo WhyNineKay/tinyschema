@@ -1,98 +1,213 @@
 import re
-from typing import Any, Type
+from typing import Any, Type, List, Optional
 
 from .errors import ValidationError
+from .remedies import Remedy
 
 
 class Validator:
-    def __init__(self, attempt_fix: bool = False) -> None:
-        self._attempt_fix = attempt_fix
+    def __init__(self, remedies: Optional[List[Remedy]] = None) -> None:
+        """
+        Base class for validators that can be applied to field values.
 
-    @property
-    def attempt_fix(self) -> bool:
-        return self._attempt_fix
+        :param remedies: Optional list of Remedy instances that can be applied to fix validation errors.
+        """
+        self._remedies = remedies if remedies is not None else []
 
     def validate(self, field_name: str, value: Any) -> Any:
         """
-        Validate the given value.
+        Validate and remedy the given value according to the validator's rules.
 
-        :param field_name: Name of the field being validated.
-        :param value: The value to be validated.
-        :return: The validated (and possibly transformed) value.
-        :raises ValidationError: If validation fails.
+        If the value fails validation, the validator will apply the remedies in order.
+        Afterward, the validator checks again. If it is still invalid, ValidationError is raised.
         """
+        if self._is_valid(value):
+            return value
 
-        raise NotImplementedError("Subclasses must implement the validate method.")
+        for remedy in self._remedies:
+            value = remedy.apply(field_name, value)
+
+            if self._is_valid(value):
+                return value
+
+        raise self._make_error(field_name, value)
+
+    def _is_valid(self, value: Any) -> bool:
+        raise NotImplementedError("Subclasses must implement _is_valid.")
+
+    def _make_error(self, field_name: str, value: Any) -> ValidationError:
+        raise NotImplementedError("Subclasses must implement _make_error.")
 
 
 class TypeValidator(Validator):
     """
     Validates that a value is of a specified type.
 
-    Does not accept attempt_fix; type mismatches will raise a ValidationError.
-
-    Will perform an 'isinstance' check against the expected type.
+    If remedies are supplied, they can attempt to convert the value before failure.
     """
 
-    def __init__(self, expected_type: Type) -> None:
-        super().__init__(attempt_fix=False)
+    def __init__(self, expected_type: Type, remedies: Optional[List[Remedy]] = None) -> None:
+        super().__init__(remedies)
         self._expected_type = expected_type
 
-    def validate(self, field_name: str, value: Any) -> Any:
-        if not isinstance(value, self._expected_type):
-            raise ValidationError(f"Field '{field_name}' expects type {self._expected_type.__name__}, "
-                                  f"got {type(value).__name__}.")
-        return value
+    def _is_valid(self, value: Any) -> bool:
+        return isinstance(value, self._expected_type)
+
+    def _make_error(self, field_name: str, value: Any) -> ValidationError:
+        return ValidationError(
+            f"Field '{field_name}' expects type {self._expected_type.__name__}, "
+            f"got {type(value).__name__}."
+        )
 
 
 class LengthValidator(Validator):
     """
     Validates that a string's length is within specified bounds.
 
-    Accepts attempt_fix; if the string is too long, it will be truncated. However, if the string is too short,
-    a ValidationError will be raised.
+    Remedies can be used to strip, truncate, pad, or otherwise transform the string.
     """
 
-    def __init__(self, min_length: int = 0, max_length: int = None, attempt_fix: bool = False) -> None:
-        super().__init__(attempt_fix)
+    def __init__(
+        self,
+        min_length: int = 0,
+        max_length: Optional[int] = None,
+        remedies: Optional[List[Remedy]] = None
+    ) -> None:
+        super().__init__(remedies)
         self._min_length = min_length
         self._max_length = max_length
 
-    def validate(self, field_name: str, value: Any) -> Any:
+    def _is_valid(self, value: Any) -> bool:
         if not isinstance(value, str):
-            raise ValidationError(f"Field '{field_name}' expects a string for length validation.")
+            return False
 
         length = len(value)
 
         if length < self._min_length:
-            raise ValidationError(f"Field '{field_name}' length {length} is less than minimum {self._min_length}.")
+            return False
 
         if self._max_length is not None and length > self._max_length:
-            if self.attempt_fix:
-                value = value[:self._max_length]
-            else:
-                raise ValidationError(f"Field '{field_name}' length {length} exceeds maximum {self._max_length}.")
+            return False
 
-        return value
+        return True
+
+    def _make_error(self, field_name: str, value: Any) -> ValidationError:
+        if not isinstance(value, str):
+            return ValidationError(
+                f"Field '{field_name}' expects a string for length validation."
+            )
+
+        length = len(value)
+
+        if length < self._min_length:
+            return ValidationError(
+                f"Field '{field_name}' length {length} is less than minimum {self._min_length}."
+            )
+
+        if self._max_length is not None and length > self._max_length:
+            return ValidationError(
+                f"Field '{field_name}' length {length} exceeds maximum {self._max_length}."
+            )
+
+        return ValidationError(f"Field '{field_name}' failed length validation.")
 
 
 class EmailValidator(Validator):
     """
     Validates that a string is a valid email address.
 
-    Does not accept attempt_fix; invalid emails will raise a ValidationError.
+    Remedies can be used to strip whitespace, lowercase, or normalize simple formatting issues.
     """
 
-    def __init__(self) -> None:
-        super().__init__(False)
+    EMAIL_REGEX = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
 
-    def validate(self, field_name: str, value: Any) -> Any:
+    def __init__(self, remedies: Optional[List[Remedy]] = None) -> None:
+        super().__init__(remedies)
+
+    def _is_valid(self, value: Any) -> bool:
         if not isinstance(value, str):
-            raise ValidationError(f"Field '{field_name}' expects a string for email validation.")
+            return False
 
-        email_regex = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+        return re.match(self.EMAIL_REGEX, value) is not None
 
-        if not re.match(email_regex, value):
-            raise ValidationError(f"Field '{field_name}' contains an invalid email address.")
+    def _make_error(self, field_name: str, value: Any) -> ValidationError:
+        if not isinstance(value, str):
+            return ValidationError(
+                f"Field '{field_name}' expects a string for email validation."
+            )
 
-        return value
+        return ValidationError(
+            f"Field '{field_name}' contains an invalid email address."
+        )
+
+
+class RangeValidator(Validator):
+    """
+    Validates that a number is within a given range.
+    """
+
+    def __init__(
+        self,
+        minimum: Optional[float] = None,
+        maximum: Optional[float] = None,
+        remedies: Optional[List[Remedy]] = None
+    ) -> None:
+        super().__init__(remedies)
+        self._minimum = minimum
+        self._maximum = maximum
+
+    def _is_valid(self, value: Any) -> bool:
+        if not isinstance(value, (int, float)):
+            return False
+
+        if self._minimum is not None and value < self._minimum:
+            return False
+
+        if self._maximum is not None and value > self._maximum:
+            return False
+
+        return True
+
+    def _make_error(self, field_name: str, value: Any) -> ValidationError:
+        if not isinstance(value, (int, float)):
+            return ValidationError(
+                f"Field '{field_name}' expects a number for range validation."
+            )
+
+        if self._minimum is not None and value < self._minimum:
+            return ValidationError(
+                f"Field '{field_name}' value {value} is less than minimum {self._minimum}."
+            )
+
+        if self._maximum is not None and value > self._maximum:
+            return ValidationError(
+                f"Field '{field_name}' value {value} exceeds maximum {self._maximum}."
+            )
+
+        return ValidationError(f"Field '{field_name}' failed range validation.")
+
+
+class RegexValidator(Validator):
+    """
+    Validates that a string matches a regular expression.
+    """
+
+    def __init__(self, pattern: str, remedies: Optional[List[Remedy]] = None) -> None:
+        super().__init__(remedies)
+        self._pattern = pattern
+
+    def _is_valid(self, value: Any) -> bool:
+        if not isinstance(value, str):
+            return False
+
+        return re.match(self._pattern, value) is not None
+
+    def _make_error(self, field_name: str, value: Any) -> ValidationError:
+        if not isinstance(value, str):
+            return ValidationError(
+                f"Field '{field_name}' expects a string for regex validation."
+            )
+
+        return ValidationError(
+            f"Field '{field_name}' does not match the required format."
+        )

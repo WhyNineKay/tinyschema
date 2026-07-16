@@ -1,7 +1,8 @@
 from pathlib import Path
 
-from tinyschema import Schema, Field, JSONFileInterface, SchemaManager
-from tinyschema.validators import TypeValidator, LengthValidator, EmailValidator
+from tinyschema import Schema, Field, JSONFileInterface, SchemaManager, validators
+from tinyschema.validators import TypeValidator, LengthValidator
+from tinyschema.remedies import TruncateStringRemedy, ClampNumberRemedy
 
 
 def main() -> None:
@@ -9,42 +10,41 @@ def main() -> None:
         fields=[
             Field(
                 name="name",
+                item_type=str,
                 required=False,
                 validators=[
                     TypeValidator(str),
-                    LengthValidator(min_length=1, max_length=100, attempt_fix=True)
+                    LengthValidator(min_length=1, max_length=100, remedies=[TruncateStringRemedy(100)])
                 ],
                 default="Unknown"
             ),
             Field(
-                name="email",
-                required=True,
-                validators=[
-                    TypeValidator(str),
-                    EmailValidator()
-                ]
-            ),
-            Field(
-                name="location",
+                name="contact",
+                item_type=dict,
                 required=True,
                 nested_fields=[
                     Field(
-                        name="city",
-                        required=True,
+                        name="email",
+                        item_type=str,
+                        required=False,
                         validators=[
                             TypeValidator(str),
-                            LengthValidator(min_length=1, max_length=50, attempt_fix=True)
-                        ]
-                    ),
-                    Field(
-                        name="country",
-                        required=True,
-                        validators=[
-                            TypeValidator(str),
-                            LengthValidator(min_length=1, max_length=50, attempt_fix=True)
-                        ]
+                            LengthValidator(min_length=5, max_length=100, remedies=[TruncateStringRemedy(100)])
+                        ],
+                        default="unknown@example.com"
                     )
-                ]
+                ],
+            ),
+            Field(
+                name="amounts",
+                item_type=list,
+                required=True,
+                iterable_template=Field(
+                    name="amount",
+                    item_type=int,
+                    required=True,
+                    validators=[validators.RangeValidator(minimum=0, maximum=5, remedies=[ClampNumberRemedy(minimum=0, maximum=5)])],
+                )
             )
         ]
     )

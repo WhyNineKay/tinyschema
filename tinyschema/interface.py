@@ -72,7 +72,7 @@ class FileInterface(DataInterface):
         """
         Load data from the file.
 
-        :return: The loaded data as a dictionary.
+        MUST be overridden by subclasses to implement the loading logic.
         """
         if not self._file_path.exists():
             if self._create_if_missing:
@@ -87,6 +87,8 @@ class FileInterface(DataInterface):
     def save(self, data: Dict) -> None:
         """
         Save data to the file.
+
+        MUST be overridden by subclasses to implement the saving logic.
 
         :param data: The data dictionary to be saved.
         """

@@ -1,24 +1,26 @@
+from typing import List
+
 from .field import Field
 
 
 class Schema:
-    def __init__(self, fields: list[Field]) -> None:
+    def __init__(self, fields: List[Field]) -> None:
         """
         :param fields: List of Field instances that define the schema.
         :raises TypeError: If fields is not a list of Field instances.
         """
 
-        if isinstance(fields, list) and all(isinstance(f, Field) for f in fields):
+        if isinstance(fields, list) and all(isinstance(field, Field) for field in fields):
             self._fields = fields
         else:
             raise TypeError("Parameter 'fields' must be a list of Field instances.")
 
     @property
-    def fields(self) -> list[Field]:
+    def fields(self) -> List[Field]:
         """
-        Get the list of Field instances in the schema.
+        Get the list of Field instances that define the schema.
 
-        :return: List of Field instances.
+        :return: The list of Field instances.
         """
         return self._fields
 
