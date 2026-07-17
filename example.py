@@ -1,61 +1,67 @@
 from pathlib import Path
 
-from tinyschema import Schema, Field, JSONFileInterface, SchemaManager, validators
-from tinyschema.validators import TypeValidator, LengthValidator
-from tinyschema.remedies import TruncateStringRemedy, ClampNumberRemedy
+from tinyschema import (
+    ClampNumberRemedy,
+    Field,
+    JSONFileInterface,
+    LengthValidator,
+    RangeValidator,
+    Schema,
+    SchemaManager,
+    TruncateStringRemedy,
+)
 
 
 def main() -> None:
     schema = Schema(
-        fields=[
+        [
+            Field("archived", bool, default=None),
             Field(
-                name="name",
-                item_type=str,
-                required=False,
+                "name",
+                str,
                 validators=[
-                    TypeValidator(str),
-                    LengthValidator(min_length=1, max_length=100, remedies=[TruncateStringRemedy(100)])
-                ],
-                default="Unknown"
-            ),
-            Field(
-                name="contact",
-                item_type=dict,
-                required=True,
-                nested_fields=[
-                    Field(
-                        name="email",
-                        item_type=str,
-                        required=False,
-                        validators=[
-                            TypeValidator(str),
-                            LengthValidator(min_length=5, max_length=100, remedies=[TruncateStringRemedy(100)])
-                        ],
-                        default="unknown@example.com"
+                    LengthValidator(
+                        min_length=1,
+                        max_length=100,
+                        remedies=[TruncateStringRemedy(100)],
                     )
                 ],
+                default="Unset",
             ),
             Field(
-                name="amounts",
-                item_type=list,
+                "contact",
+                dict,
+                required=True,
+                nested_fields=[
+                    Field("email", str, default="unknown@example.com"),
+                ],
+            ),
+            Field(
+                "amounts",
+                list,
                 required=True,
                 iterable_template=Field(
-                    name="amount",
-                    item_type=int,
+                    "amount",
+                    int,
                     required=True,
-                    validators=[validators.RangeValidator(minimum=0, maximum=5, remedies=[ClampNumberRemedy(minimum=0, maximum=5)])],
-                )
-            )
+                    validators=[
+                        RangeValidator(
+                            minimum=0,
+                            maximum=5,
+                            remedies=[ClampNumberRemedy(minimum=0, maximum=5)],
+                        )
+                    ],
+                ),
+            ),
         ]
     )
 
-    interface = JSONFileInterface(Path("example_data.json"), True)
+    data_path = Path(__file__).with_name("example_data.json")
+    interface = JSONFileInterface(data_path)
     manager = SchemaManager(schema, interface)
-
     data = manager.load_and_validate()
-
     print(data)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

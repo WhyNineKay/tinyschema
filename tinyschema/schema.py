@@ -1,22 +1,27 @@
-from typing import List
+from typing import Any
 
+from ._sentinels import MISSING
 from .field import Field
 
 
 class Schema:
-    def __init__(self, fields: List[Field]) -> None:
+    """Validate dictionaries against an ordered collection of fields."""
+
+    def __init__(self, fields: list[Field]) -> None:
         """
         :param fields: List of Field instances that define the schema.
         :raises TypeError: If fields is not a list of Field instances.
         """
 
-        if isinstance(fields, list) and all(isinstance(field, Field) for field in fields):
+        if isinstance(fields, list) and all(
+            isinstance(field, Field) for field in fields
+        ):
             self._fields = fields
         else:
             raise TypeError("Parameter 'fields' must be a list of Field instances.")
 
     @property
-    def fields(self) -> List[Field]:
+    def fields(self) -> list[Field]:
         """
         Get the list of Field instances that define the schema.
 
@@ -24,7 +29,7 @@ class Schema:
         """
         return self._fields
 
-    def validate(self, data: dict) -> dict:
+    def validate(self, data: dict[Any, Any]) -> dict[str, Any]:
         """
         Validate the given data dictionary against the schema.
 
@@ -38,16 +43,13 @@ class Schema:
 
         if not isinstance(data, dict):
             raise TypeError(
-                f"Schema.validate expects 'data' to be a dict, got {type(data).__name__}."
+                "Schema.validate expects 'data' to be a dict, "
+                f"got {type(data).__name__}."
             )
 
-        validated_data = {}
-
-        for field in self._fields:
-            # Get the field data from the input dictionary, defaulting to None if not present
-            field_data = data.get(field.name, None)
-
-            # Parse and validate the field data
-            validated_data[field.name] = field.parse(field_data)
-
-        return validated_data
+        # Unknown keys are intentionally dropped. If names are duplicated, the
+        # final field result wins because dictionaries retain one value per key.
+        return {
+            field.name: field.parse(data.get(field.name, MISSING))
+            for field in self._fields
+        }

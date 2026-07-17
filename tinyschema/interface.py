@@ -1,60 +1,47 @@
 import json
+from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict
+from typing import Any
+
+Data = dict[str, Any]
 
 
-class DataInterface:
-    """Base class for data loading and saving interfaces."""
+class DataInterface(ABC):
+    """Source used to load and save schema data."""
 
-    def load(self) -> Dict:
-        """
-        Load data from a source.
-
-        :return: The loaded data as a dictionary.
-        """
+    @abstractmethod
+    def load(self) -> Data:
+        """Load and return a data dictionary."""
         raise NotImplementedError("Subclasses must implement the load method.")
 
-    def save(self, data: Dict) -> None:
-        """
-        Save data to a source.
-
-        :param data: The data dictionary to be saved.
-        """
+    @abstractmethod
+    def save(self, data: Data) -> None:
+        """Save a data dictionary."""
         raise NotImplementedError("Subclasses must implement the save method.")
 
 
-class FileInterface(DataInterface):
-    """Base class for file-based data loading and saving interfaces."""
+class FileInterface(DataInterface, ABC):
+    """Base class for file-backed data interfaces."""
 
-    def __init__(self,
-                 file_path: Path,
-                 create_if_missing: bool = None,
-                 template_data: Dict = None
-                 ) -> None:
-        """
-        :param file_path: Path to the file for loading/saving data.
-        :param create_if_missing: Whether to create the file if it does not exist. Defaults to False.
-        :param template_data: Template data to use when creating a new file. Defaults to an empty dictionary.
-        :raises TypeError: If parameters are of incorrect types.
-        """
-        self._file_path = file_path
-
-        if create_if_missing is None:
-            self._create_if_missing = False
-        elif isinstance(create_if_missing, bool):
-            self._create_if_missing = create_if_missing
-        else:
+    def __init__(
+        self,
+        file_path: Path,
+        create_if_missing: bool = False,
+        template_data: Data | None = None,
+    ) -> None:
+        if not isinstance(file_path, Path):
+            raise TypeError("Parameter 'file_path' must be a pathlib.Path instance.")
+        if not isinstance(create_if_missing, bool):
             raise TypeError("Parameter 'create_if_missing' must be of type bool.")
-
-        if template_data is None:
-            self._template_data = {}
-        elif isinstance(template_data, dict):
-            self._template_data = template_data
-        else:
+        if template_data is not None and not isinstance(template_data, dict):
             raise TypeError("Parameter 'template_data' must be of type dict.")
 
+        self._file_path = file_path
+        self._create_if_missing = create_if_missing
+        self._template_data = template_data if template_data is not None else {}
+
     @property
-    def template_data(self) -> Dict:
+    def template_data(self) -> Data:
         return self._template_data
 
     @property
@@ -65,57 +52,34 @@ class FileInterface(DataInterface):
     def create_if_missing(self) -> bool:
         return self._create_if_missing
 
-    def _save_template_data(self) -> None:
+    def _ensure_file_exists(self) -> None:
+        if self._file_path.exists():
+            return
+
+        if not self._create_if_missing:
+            raise FileNotFoundError(f"File '{self._file_path}' does not exist.")
+
+        self._file_path.touch()
         self.save(self._template_data)
-
-    def load(self) -> Dict:
-        """
-        Load data from the file.
-
-        MUST be overridden by subclasses to implement the loading logic.
-        """
-        if not self._file_path.exists():
-            if self._create_if_missing:
-                # Create the file and populate it with the template data
-                self._file_path.touch()
-
-                self._save_template_data()
-
-            else:
-                raise FileNotFoundError(f"File '{self._file_path}' does not exist.")
-
-    def save(self, data: Dict) -> None:
-        """
-        Save data to the file.
-
-        MUST be overridden by subclasses to implement the saving logic.
-
-        :param data: The data dictionary to be saved.
-        """
-        raise NotImplementedError("Subclasses must implement the save method.")
 
 
 class JSONFileInterface(FileInterface):
-    """JSON file-based data loading and saving interface."""
+    """Load and save dictionaries as UTF-8 JSON files."""
 
-    def load(self) -> Dict:
-        """
-        Load data from the JSON file.
+    def load(self) -> Data:
+        self._ensure_file_exists()
 
-        :return: The loaded data as a dictionary.
-        """
-        super().load()
+        with self._file_path.open("r", encoding="utf-8") as file:
+            data = json.load(file)
 
-        with self._file_path.open("r", encoding="utf-8") as f:
-            data = json.load(f)
+        if not isinstance(data, dict):
+            raise TypeError("JSON data must contain an object at the document root.")
 
         return data
 
-    def save(self, data: Dict) -> None:
-        """
-        Save data to the JSON file.
+    def save(self, data: Data) -> None:
+        if not isinstance(data, dict):
+            raise TypeError("Parameter 'data' must be of type dict.")
 
-        :param data: The data dictionary to be saved.
-        """
-        with self._file_path.open("w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4)
+        with self._file_path.open("w", encoding="utf-8") as file:
+            json.dump(data, file, indent=4)

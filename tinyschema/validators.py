@@ -1,25 +1,33 @@
 import re
-from typing import Any, Type, List, Optional
+from abc import ABC, abstractmethod
+from typing import Any
 
 from .errors import ValidationError
 from .remedies import Remedy
 
 
-class Validator:
-    def __init__(self, remedies: Optional[List[Remedy]] = None) -> None:
+class Validator(ABC):
+    def __init__(self, remedies: list[Remedy] | None = None) -> None:
         """
         Base class for validators that can be applied to field values.
 
-        :param remedies: Optional list of Remedy instances that can be applied to fix validation errors.
+        :param remedies: Remedies that may fix invalid values.
         """
-        self._remedies = remedies if remedies is not None else []
+        if remedies is None:
+            self._remedies: list[Remedy] = []
+        elif isinstance(remedies, list) and all(
+            isinstance(remedy, Remedy) for remedy in remedies
+        ):
+            self._remedies = remedies
+        else:
+            raise TypeError("Parameter 'remedies' must be a list of Remedy instances.")
 
     def validate(self, field_name: str, value: Any) -> Any:
         """
         Validate and remedy the given value according to the validator's rules.
 
-        If the value fails validation, the validator will apply the remedies in order.
-        Afterward, the validator checks again. If it is still invalid, ValidationError is raised.
+        Remedies are applied in order until the value becomes valid. A value
+        that remains invalid raises ValidationError.
         """
         if self._is_valid(value):
             return value
@@ -32,9 +40,11 @@ class Validator:
 
         raise self._make_error(field_name, value)
 
+    @abstractmethod
     def _is_valid(self, value: Any) -> bool:
         raise NotImplementedError("Subclasses must implement _is_valid.")
 
+    @abstractmethod
     def _make_error(self, field_name: str, value: Any) -> ValidationError:
         raise NotImplementedError("Subclasses must implement _make_error.")
 
@@ -46,8 +56,14 @@ class TypeValidator(Validator):
     If remedies are supplied, they can attempt to convert the value before failure.
     """
 
-    def __init__(self, expected_type: Type, remedies: Optional[List[Remedy]] = None) -> None:
+    def __init__(
+        self,
+        expected_type: type[Any],
+        remedies: list[Remedy] | None = None,
+    ) -> None:
         super().__init__(remedies)
+        if expected_type is Any or not isinstance(expected_type, type):
+            raise TypeError("Parameter 'expected_type' must be a type.")
         self._expected_type = expected_type
 
     def _is_valid(self, value: Any) -> bool:
@@ -70,10 +86,20 @@ class LengthValidator(Validator):
     def __init__(
         self,
         min_length: int = 0,
-        max_length: Optional[int] = None,
-        remedies: Optional[List[Remedy]] = None
+        max_length: int | None = None,
+        remedies: list[Remedy] | None = None,
     ) -> None:
         super().__init__(remedies)
+        if not isinstance(min_length, int) or isinstance(min_length, bool):
+            raise TypeError("Parameter 'min_length' must be an integer.")
+        if max_length is not None and (
+            not isinstance(max_length, int) or isinstance(max_length, bool)
+        ):
+            raise TypeError("Parameter 'max_length' must be an integer or None.")
+        if min_length < 0:
+            raise ValueError("Parameter 'min_length' cannot be negative.")
+        if max_length is not None and max_length < min_length:
+            raise ValueError("Parameter 'max_length' cannot be less than 'min_length'.")
         self._min_length = min_length
         self._max_length = max_length
 
@@ -86,10 +112,7 @@ class LengthValidator(Validator):
         if length < self._min_length:
             return False
 
-        if self._max_length is not None and length > self._max_length:
-            return False
-
-        return True
+        return self._max_length is None or length <= self._max_length
 
     def _make_error(self, field_name: str, value: Any) -> ValidationError:
         if not isinstance(value, str):
@@ -101,12 +124,14 @@ class LengthValidator(Validator):
 
         if length < self._min_length:
             return ValidationError(
-                f"Field '{field_name}' length {length} is less than minimum {self._min_length}."
+                f"Field '{field_name}' length {length} is less than "
+                f"minimum {self._min_length}."
             )
 
         if self._max_length is not None and length > self._max_length:
             return ValidationError(
-                f"Field '{field_name}' length {length} exceeds maximum {self._max_length}."
+                f"Field '{field_name}' length {length} exceeds "
+                f"maximum {self._max_length}."
             )
 
         return ValidationError(f"Field '{field_name}' failed length validation.")
@@ -116,13 +141,10 @@ class EmailValidator(Validator):
     """
     Validates that a string is a valid email address.
 
-    Remedies can be used to strip whitespace, lowercase, or normalize simple formatting issues.
+    Remedies can normalize simple formatting issues before failure.
     """
 
     EMAIL_REGEX = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
-
-    def __init__(self, remedies: Optional[List[Remedy]] = None) -> None:
-        super().__init__(remedies)
 
     def _is_valid(self, value: Any) -> bool:
         if not isinstance(value, str):
@@ -148,11 +170,18 @@ class RangeValidator(Validator):
 
     def __init__(
         self,
-        minimum: Optional[float] = None,
-        maximum: Optional[float] = None,
-        remedies: Optional[List[Remedy]] = None
+        minimum: float | None = None,
+        maximum: float | None = None,
+        remedies: list[Remedy] | None = None,
     ) -> None:
         super().__init__(remedies)
+        for name, bound in (("minimum", minimum), ("maximum", maximum)):
+            if bound is not None and (
+                not isinstance(bound, (int, float)) or isinstance(bound, bool)
+            ):
+                raise TypeError(f"Parameter '{name}' must be a number or None.")
+        if minimum is not None and maximum is not None and minimum > maximum:
+            raise ValueError("Parameter 'minimum' cannot exceed 'maximum'.")
         self._minimum = minimum
         self._maximum = maximum
 
@@ -163,10 +192,7 @@ class RangeValidator(Validator):
         if self._minimum is not None and value < self._minimum:
             return False
 
-        if self._maximum is not None and value > self._maximum:
-            return False
-
-        return True
+        return self._maximum is None or value <= self._maximum
 
     def _make_error(self, field_name: str, value: Any) -> ValidationError:
         if not isinstance(value, (int, float)):
@@ -176,7 +202,8 @@ class RangeValidator(Validator):
 
         if self._minimum is not None and value < self._minimum:
             return ValidationError(
-                f"Field '{field_name}' value {value} is less than minimum {self._minimum}."
+                f"Field '{field_name}' value {value} is less than "
+                f"minimum {self._minimum}."
             )
 
         if self._maximum is not None and value > self._maximum:
@@ -192,15 +219,17 @@ class RegexValidator(Validator):
     Validates that a string matches a regular expression.
     """
 
-    def __init__(self, pattern: str, remedies: Optional[List[Remedy]] = None) -> None:
+    def __init__(self, pattern: str, remedies: list[Remedy] | None = None) -> None:
         super().__init__(remedies)
-        self._pattern = pattern
+        if not isinstance(pattern, str):
+            raise TypeError("Parameter 'pattern' must be a string.")
+        self._compiled_pattern = re.compile(pattern)
 
     def _is_valid(self, value: Any) -> bool:
         if not isinstance(value, str):
             return False
 
-        return re.match(self._pattern, value) is not None
+        return self._compiled_pattern.match(value) is not None
 
     def _make_error(self, field_name: str, value: Any) -> ValidationError:
         if not isinstance(value, str):
