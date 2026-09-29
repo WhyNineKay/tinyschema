@@ -38,11 +38,11 @@ class SchemaManager:
     def validate_on_save(self) -> bool:
         return self._validate_on_save
 
-    def load_and_validate(self) -> dict[str, Any]:
+    def load(self) -> dict[str, Any]:
         """Load data from the interface and validate it against the schema."""
         return self._schema.validate(self._interface.load())
 
-    def save_data(self, data: dict[str, Any]) -> None:
+    def save(self, data: dict[str, Any]) -> None:
         """Save data, validating it first when configured to do so."""
         if self._validate_on_save:
             data = self._schema.validate(data)

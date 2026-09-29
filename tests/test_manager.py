@@ -21,14 +21,14 @@ def test_manager_loads_and_validates() -> None:
     interface = MemoryInterface({})
     manager = SchemaManager(Schema([Field("name", str, default="Unknown")]), interface)
 
-    assert manager.load_and_validate() == {"name": "Unknown"}
+    assert manager.load() == {"name": "Unknown"}
 
 
 def test_manager_validates_before_saving_by_default() -> None:
     interface = MemoryInterface({})
     manager = SchemaManager(Schema([Field("name", str, default="Unknown")]), interface)
 
-    manager.save_data({})
+    manager.save({})
 
     assert interface.saved == {"name": "Unknown"}
 
@@ -41,7 +41,7 @@ def test_manager_can_save_without_validation() -> None:
         validate_on_save=False,
     )
 
-    manager.save_data({"extra": True})
+    manager.save({"extra": True})
 
     assert interface.saved == {"extra": True}
 

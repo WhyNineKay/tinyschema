@@ -122,8 +122,8 @@ from tinyschema import JSONFileInterface, SchemaManager
 
 interface = JSONFileInterface(Path("data.json"), create_if_missing=True)
 manager = SchemaManager(schema, interface)
-data = manager.load_and_validate()
-manager.save_data(data)
+data = manager.load()
+manager.save(data)
 ```
 
 JSON documents must contain an object at the root.

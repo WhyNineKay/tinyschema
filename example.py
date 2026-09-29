@@ -59,7 +59,7 @@ def main() -> None:
     data_path = Path(__file__).with_name("example_data.json")
     interface = JSONFileInterface(data_path)
     manager = SchemaManager(schema, interface)
-    data = manager.load_and_validate()
+    data = manager.load()
     print(data)
 
 
