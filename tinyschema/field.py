@@ -156,6 +156,10 @@ class Field:
         return self._nested_fields
 
     @property
+    def iterable_template(self) -> Field | None:
+        return self._iterable_template
+
+    @property
     def default(self) -> Any:
         return None if self._default is MISSING else self._default
 
