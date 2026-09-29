@@ -59,6 +59,7 @@ class FileInterface(DataInterface, ABC):
         if not self._create_if_missing:
             raise FileNotFoundError(f"File '{self._file_path}' does not exist.")
 
+        self._file_path.parent.mkdir(parents=True, exist_ok=True)
         self._file_path.touch()
         self.save(self._template_data)
 
